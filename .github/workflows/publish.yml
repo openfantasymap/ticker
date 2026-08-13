@@ -23,7 +23,11 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # `write`, not `read`: the last step drafts a GitHub release, and doing
+      # that needs write on contents. With `read` the image publishes fine and
+      # then the run fails at the very end with a 403 — everything shipped, the
+      # build red.
+      contents: write
       packages: write
       # Lets the build attach a signed statement of where it came from.
       id-token: write
