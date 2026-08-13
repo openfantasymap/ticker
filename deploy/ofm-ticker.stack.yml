@@ -10,7 +10,7 @@ version: "3.8"
 
 services:
   ticker:
-    image: ghcr.io/openfantasymap/ticker:0.1.0
+    image: ghcr.io/openfantasymap/ticker:0.1.1
     environment:
       # WHERE. The browsers reach this same broker over wss://…:8884/mqtt, so a
       # tick published here on 1883 arrives in the game.
@@ -68,6 +68,33 @@ services:
         ofm.tick.start: epoch
         ofm.tick.origin: "0"
         ofm.tick.label: Toril
+
+  # Luna, in the Star Trek Adventures setting. A second world on the same
+  # ticker: its own family key, its own calendar, its own rate if it wants one.
+  # Nothing about Toril needed changing to add it.
+  sta-sol-iii-i:
+    image: alpine:3
+    command: ["sleep", "infinity"]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy: { condition: any }
+      resources:
+        limits: { memory: 16M }
+      labels:
+        ofm.tick.enable: "true"
+        ofm.tick.family: cities-world
+        ofm.tick.key: sta-sol-iii-i
+        ofm.tick.interval: 1m
+        ofm.tick.represents: 1 month
+        # 2368 is what this world's own timeline.json says the date is.
+        ofm.tick.calendar.start: "2368-01-01"
+        ofm.tick.calendar.ticksPerYear: "12"
+        ofm.tick.start: epoch
+        ofm.tick.epoch: "2026-08-13T11:49:27Z"
+        ofm.tick.origin: "0"
+        ofm.tick.label: Luna
 
 volumes:
   ticker-state:
