@@ -1,0 +1,77 @@
+# Tests, on every push and pull request.
+#
+# A real broker runs beside the job rather than the tests pointing at a public
+# one. The MQTT client here is hand-written, so "does it actually speak the
+# protocol" is the single most valuable thing CI can answer — and answering it
+# against someone else's public broker makes the build fail when their service
+# has a bad day, which teaches everyone to ignore red builds.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mosquitto:
+        image: eclipse-mosquitto:2
+        ports:
+          - 1883:1883
+        options: >-
+          --health-cmd "mosquitto_sub -t \$SYS/# -C 1 -W 3 -h localhost || exit 1"
+          --health-interval 5s --health-timeout 5s --health-retries 5
+
+    strategy:
+      matrix:
+        node: ['18', '20', '22']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # Mosquitto 2 denies anonymous clients unless told otherwise, and the
+      # image ships no config, so the service container needs one written in.
+      - name: configure the broker
+        run: |
+          docker exec ${{ job.services.mosquitto.id }} sh -c \
+            'printf "listener 1883\nallow_anonymous true\n" > /mosquitto/config/mosquitto.conf'
+          docker restart ${{ job.services.mosquitto.id }}
+          for i in $(seq 1 30); do
+            (echo > /dev/tcp/127.0.0.1/1883) >/dev/null 2>&1 && break
+            sleep 1
+          done
+
+      # No dependencies, so there is nothing to install. That is the point.
+      - name: no install step
+        run: test ! -f package-lock.json && echo "zero dependencies"
+
+      - name: test
+        run: node test/ticker-check.js --broker mqtt://127.0.0.1:1883
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Prove the image builds on every PR, without publishing it.
+      - name: build
+        run: docker build -t ofm-ticker:ci .
+      - name: it starts and reports its configuration
+        run: |
+          out=$(docker run --rm -e TICK_DRY_RUN=true -e TICK_LOG=debug \
+            --entrypoint node ofm-ticker:ci -e "
+              import('/app/src/ticker.js').then(m => {
+                const plan = m.planOf({ id:'t/x', family:'t', key:'x', labels:{
+                  enable:'true', interval:'1h', represents:'1 month',
+                  epoch:'2026-01-01T00:00:00Z', 'calendar.start':'2287-01-01' } });
+                console.log('tick', m.tickAt(plan, Date.parse('2026-01-02T00:00:00Z')));
+              });
+            ")
+          echo "$out"
+          echo "$out" | grep -q 'tick 24'
