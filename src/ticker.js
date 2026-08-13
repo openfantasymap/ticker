@@ -208,14 +208,44 @@ export class Ticker {
     catch { return { families: {} }; }
   }
 
+  /**
+   * Say once, at startup, whether state can be written — and what it costs.
+   *
+   * Found by deploying: a named volume is created root-owned, and this image
+   * runs as `node`, so the very first write fails. That is harmless for
+   * `start=epoch` families, whose epoch is in a label and needs no memory at
+   * all, and quietly damaging for `start=now` ones, whose epoch lives nowhere
+   * else and is therefore re-derived on every restart — a clock that silently
+   * goes back to zero.
+   *
+   * So the difference is stated up front rather than left as a warning
+   * somewhere in the log, and it names the fix.
+   */
+  checkState() {
+    try {
+      fs.mkdirSync(path.dirname(this.stateFile), { recursive: true });
+      fs.accessSync(path.dirname(this.stateFile), fs.constants.W_OK);
+      this.stateWritable = true;
+    } catch {
+      this.stateWritable = false;
+      log('warn', `state is not writable at ${this.stateFile}`);
+      log('warn', '  families using start=epoch are unaffected — their epoch is a label');
+      log('warn', '  families using start=now will restart their clock on every restart');
+      log('warn', `  fix: chown the volume to this user (${process.getuid?.() ?? '?'}:`
+        + `${process.getgid?.() ?? '?'}), or set TICK_STATE to a writable path`);
+    }
+    return this.stateWritable;
+  }
+
   #saveState() {
+    if (this.stateWritable === false) return;      // already said so, once
     try {
       fs.mkdirSync(path.dirname(this.stateFile), { recursive: true });
       fs.writeFileSync(this.stateFile, JSON.stringify(this.state, null, 1));
     } catch (err) {
-      // Losing state costs a `start=now` family its epoch on the next restart,
-      // which restarts its clock. Worth a warning; not worth dying over.
+      this.stateWritable = false;
       log('warn', `cannot write ${this.stateFile}: ${err.message}`);
+      log('warn', '  start=now families will restart their clock on every restart');
     }
   }
 
@@ -368,6 +398,7 @@ async function main() {
   client?.connect();
 
   const ticker = new Ticker({ client });
+  ticker.checkState();
 
   if (!(await docker.available())) {
     log('error', 'docker socket unreachable — nothing to discover. '

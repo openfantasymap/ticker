@@ -1,0 +1,73 @@
+# The ticker, on this swarm, keeping time for the cities game.
+#
+#   docker stack deploy -c deploy/ofm-ticker.stack.yml ofm-ticker
+#
+# Two services and one idea: `ticker` publishes, and `toril` exists only to
+# carry the labels that say what Toril's time is. Adding a second world means
+# adding a second marker, not touching the ticker.
+
+version: "3.8"
+
+services:
+  ticker:
+    image: ghcr.io/openfantasymap/ticker:0.1.0
+    environment:
+      # WHERE. The browsers reach this same broker over wss://…:8884/mqtt, so a
+      # tick published here on 1883 arrives in the game.
+      MQTT_URL: mqtt://broker.hivemq.com:1883
+      TICK_TOPIC_ROOT: ofm/tick
+      TICK_LOG: info
+    # Socket access without running as root.
+    #
+    # `group_add` is a compose-only key — `docker stack deploy` rejects it
+    # outright, as it does `groups`. Swarm's way is to set the primary group
+    # instead: uid 1000 is `node` in the image, gid 115 is this host's docker
+    # group. Check yours with: stat -c '%g' /var/run/docker.sock
+    user: "1000:115"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ticker-state:/var/lib/ofm-ticker
+    deploy:
+      replicas: 1
+      placement:
+        # Only a manager can list swarm services, and the whole point of this
+        # service is reading labels off them.
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: any
+        delay: 5s
+      resources:
+        limits: { memory: 96M }
+
+  # Toril's clock. This container does nothing; its labels are the point.
+  toril:
+    image: alpine:3
+    command: ["sleep", "infinity"]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy: { condition: any }
+      resources:
+        limits: { memory: 16M }
+      labels:
+        ofm.tick.enable: "true"
+        ofm.tick.family: cities-world
+        ofm.tick.key: toril
+        # A minute of real time is a month of Toril's: a year every twelve
+        # minutes. Fast enough to watch an economy move, slow enough that a
+        # player away for an hour catches up in sixty ticks rather than
+        # thousands — which is the number that decides whether coming back is
+        # instant or a stall.
+        ofm.tick.interval: 1m
+        ofm.tick.represents: 1 month
+        # Matches the distant-world pack: 2287 AL, twelve months to the year.
+        ofm.tick.calendar.start: "2287-01-01"
+        ofm.tick.calendar.ticksPerYear: "12"
+        ofm.tick.epoch: "2026-08-13T10:58:02Z"
+        ofm.tick.start: epoch
+        ofm.tick.origin: "0"
+        ofm.tick.label: Toril
+
+volumes:
+  ticker-state:

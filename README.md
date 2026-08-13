@@ -104,6 +104,27 @@ instead of waiting an interval.
 
 - **No dependencies.** The Docker API is HTTP over a unix socket, and the MQTT
   the service needs is small enough to write. The image is node plus three files.
+
+## On Docker Swarm
+
+```bash
+docker stack deploy -c examples/swarm-stack.yml ofm-ticker
+```
+
+Two things differ from plain Docker and both are easy to lose an afternoon to:
+
+- **`group_add` does not exist in the stack schema.** Neither does `groups` —
+  `docker stack deploy` rejects both outright. Swarm's way to reach the socket
+  without running as root is to set the primary group directly:
+  `user: "1000:115"`, where 1000 is `node` in this image and 115 is your host's
+  docker group (`stat -c '%g' /var/run/docker.sock`).
+- **Pin the service to a manager.** Only a manager can list swarm services, and
+  reading labels off them is the entire job: `constraints: [node.role == manager]`.
+
+A named volume is created root-owned, so a service running as `node` cannot
+write it. That is fine for `start=epoch` families and not for `start=now` ones —
+the service says which at startup rather than leaving you to notice.
+
 - **Mount the socket read-only** (`:ro`). It only ever lists and watches.
 - **The image runs as `node`, not root**, so it needs the socket's group:
   `--group-add "$(stat -c '%g' /var/run/docker.sock)"`, or `group_add` in

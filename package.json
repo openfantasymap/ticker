@@ -1,22 +1,44 @@
 {
   "name": "@openfantasymap/ticker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A generic tick service. Games declare what a tick means with Docker labels; one process publishes the time over MQTT.",
   "type": "module",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/openfantasymap/ticker.git" },
-  "bugs": { "url": "https://github.com/openfantasymap/ticker/issues" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openfantasymap/ticker.git"
+  },
+  "bugs": {
+    "url": "https://github.com/openfantasymap/ticker/issues"
+  },
   "homepage": "https://github.com/openfantasymap/ticker#readme",
   "main": "src/ticker.js",
-  "bin": { "ofm-ticker": "src/ticker.js" },
-  "files": ["src", "README.md", "LICENSE"],
-  "engines": { "node": ">=18" },
+  "bin": {
+    "ofm-ticker": "src/ticker.js"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node src/ticker.js",
     "test": "node test/ticker-check.js",
     "test:offline": "node test/ticker-check.js --no-broker"
   },
-  "keywords": ["mqtt", "tick", "clock", "docker", "labels", "game", "simulation", "ofm"],
+  "keywords": [
+    "mqtt",
+    "tick",
+    "clock",
+    "docker",
+    "labels",
+    "game",
+    "simulation",
+    "ofm"
+  ],
   "dependencies": {},
   "devDependencies": {}
 }
